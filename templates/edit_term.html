@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Term — {{ term.term }}{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width:700px;margin:0 auto">
+
+  <div class="page-header">
+    <div class="section-label">Admin Panel</div>
+    <h1 class="page-title">Edit <span class="text-glow-blue">{{ term.term }}</span></h1>
+  </div>
+
+  <div class="glass-card" style="padding:var(--space-xl)">
+    <form method="POST" action="/admin/term/{{ term.id }}/edit">
+
+      <div class="form-group">
+        <label class="form-label">Term</label>
+        <input class="form-input" type="text" value="{{ term.term }}" disabled />
+      </div>
+
+      <div class="form-group" style="margin-top:var(--space-lg)">
+        <label class="form-label" for="ctx">Context Description</label>
+        <textarea
+          class="form-input"
+          id="ctx"
+          name="context_description"
+          rows="5"
+          placeholder="Describe why this term is classified…"
+          style="resize:vertical"
+        >{{ term.context_description or '' }}</textarea>
+      </div>
+
+      <div style="display:flex;gap:var(--space-md);margin-top:var(--space-xl)">
+        <button type="submit" class="btn-iai">Save &amp; Re-embed</button>
+        <a href="/admin" class="btn-secondary" style="display:inline-flex;align-items:center;padding:10px 20px">Cancel</a>
+      </div>
+
+    </form>
+  </div>
+
+</div>
+{% endblock %}

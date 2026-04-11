@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block title %}IAI Semantic DLP — Admin Panel{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <div class="page-header">
+    <div class="section-label">Knowledge Base Management</div>
+    <h1 class="page-title">
+      Admin <span class="text-glow-blue">Panel</span>
+    </h1>
+    <p class="page-subtitle">
+      Manage the forbidden terms knowledge base. Edit context descriptions to improve LLM reasoning accuracy.
+    </p>
+  </div>
+
+  <!-- ── Add Term Form ──────────────────────────────────────────────────── -->
+  <div class="glass-card admin-form-card" style="margin-bottom:var(--space-xl)">
+    <div class="section-label" style="margin-bottom:var(--space-md)">Add / Update Term</div>
+    <form id="addTermForm" style="display:grid;grid-template-columns:1fr 2fr auto;gap:var(--space-md);align-items:end">
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label" for="termInput">Term</label>
+        <input class="form-input" type="text" id="termInput" name="term"
+               placeholder="e.g. Arrow-3" required autocomplete="off" />
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label" for="ctxInput">Context Description</label>
+        <input class="form-input" type="text" id="ctxInput" name="context_description"
+               placeholder="Describe why this term is classified…" />
+      </div>
+      <button type="submit" id="addTermBtn" class="btn-iai">
+        ＋ Add Term
+      </button>
+    </form>
+    <div id="addTermMsg" style="margin-top:10px;font-size:.85rem;display:none"></div>
+  </div>
+
+  <!-- ── Terms table ────────────────────────────────────────────────────── -->
+  <div class="glass-card" style="margin-bottom:var(--space-sm);padding:var(--space-md) var(--space-xl);display:flex;align-items:center;gap:var(--space-md)">
+    <input type="text" id="termFilter" class="form-input" style="max-width:280px"
+           placeholder="Filter terms…" oninput="filterTerms()" />
+    <span style="margin-left:auto;font-size:.85rem;color:var(--iai-silver-400)">
+      <strong id="termCount" style="color:var(--iai-silver-100)">{{ terms|length }}</strong> terms
+    </span>
+  </div>
+
+  <div class="table-wrapper glass-card">
+    <table class="data-table" id="termsTable">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Term</th>
+          <th>Context Description</th>
+          <th>Embedding</th>
+          <th>Last Updated</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for term in terms %}
+        <tr class="term-row" data-term="{{ term.term|lower }}">
+          <td style="color:var(--iai-silver-400);font-size:.8rem">#{{ term.id }}</td>
+          <td>
+            <span style="font-weight:600;color:var(--iai-silver-100)">{{ term.term }}</span>
+          </td>
+          <td id="ctx-{{ term.id }}" style="max-width:400px">
+            <span class="ctx-text">
+              {% if term.context_description %}
+                {{ term.context_description }}
+              {% else %}
+                <em style="color:var(--iai-silver-500)">No description</em>
+              {% endif %}
+            </span>
+            <br />
+            <a href="/admin/term/{{ term.id }}/edit"
+               class="btn-secondary"
+               style="display:inline-block;margin-top:6px;padding:4px 10px;font-size:.75rem">
+              ✏️ Edit
+            </a>
+          </td>
+          <td>
+            {% if term.embedding_json %}
+              <span class="badge-approved" style="font-size:.7rem">✓ Embedded</span>
+            {% else %}
+              <span style="color:var(--iai-silver-500);font-size:.8rem">—</span>
+            {% endif %}
+          </td>
+          <td style="font-size:.8rem;color:var(--iai-silver-400);white-space:nowrap">
+            {{ term.updated_at.strftime('%Y-%m-%d') if term.updated_at else '—' }}
+          </td>
+          <td>
+            <form method="POST" action="/admin/term/{{ term.id }}/delete"
+                  onsubmit="return confirm('Delete term: {{ term.term }}?')" style="display:inline">
+              <button type="submit" class="btn-danger">🗑️ Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" style="text-align:center;padding:48px;color:var(--iai-silver-400)">
+            No terms in database. Run <code>python data/terms_loader.py</code> to ingest from Word file.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function filterTerms() {
+  const q    = document.getElementById('termFilter').value.toLowerCase();
+  const rows = document.querySelectorAll('#termsTable .term-row');
+  let visible = 0;
+  rows.forEach(row => {
+    const show = !q || row.dataset.term.includes(q);
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  document.getElementById('termCount').textContent = visible;
+}
+
+// Add term with AJAX + spinner
+document.getElementById('addTermForm').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const btn = document.getElementById('addTermBtn');
+  const msg = document.getElementById('addTermMsg');
+  const term = document.getElementById('termInput').value.trim();
+  const ctx  = document.getElementById('ctxInput').value.trim();
+
+  btn.textContent = 'Adding…';
+  btn.disabled = true;
+  msg.style.display = 'none';
+
+  fetch('/admin/term', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'term=' + encodeURIComponent(term) + '&context_description=' + encodeURIComponent(ctx)
+  })
+  .then(r => r.json())
+  .then(data => {
+    msg.style.display = 'block';
+    msg.style.color = 'var(--iai-green, #4ade80)';
+    msg.textContent = '✓ "' + data.term + '" added' + (data.embedded ? ' and embedded.' : ' (embedding failed).');
+    document.getElementById('termInput').value = '';
+    document.getElementById('ctxInput').value = '';
+    btn.textContent = '＋ Add Term';
+    btn.disabled = false;
+    setTimeout(() => location.reload(), 1200);
+  })
+  .catch(() => {
+    msg.style.display = 'block';
+    msg.style.color = '#f87171';
+    msg.textContent = 'Failed to add term. Please try again.';
+    btn.textContent = '＋ Add Term';
+    btn.disabled = false;
+  });
+});
+</script>
+{% endblock %}

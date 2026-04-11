@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="he" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#050d1a" />
+  <title>{% block title %}IAI Semantic DLP{% endblock %}</title>
+
+  <!-- Brand stylesheet -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+<!-- Background grid -->
+<div class="bg-grid-overlay"></div>
+
+<!-- ── Navigation ─────────────────────────────────────────────────────────── -->
+<nav class="navbar">
+  <div class="navbar-brand">
+    <div class="navbar-logo">IAI</div>
+    <div>
+      <div class="navbar-title font-display">Semantic DLP</div>
+      <div class="navbar-subtitle">Content Filtering System</div>
+    </div>
+  </div>
+
+  <ul class="navbar-nav">
+    <li><a href="/">Scan</a></li>
+    <li><a href="/history">Audit Log</a></li>
+    <li><a href="/admin">Admin</a></li>
+  </ul>
+</nav>
+
+<!-- ── Main content ───────────────────────────────────────────────────────── -->
+<main style="position:relative;z-index:1">
+  {% block content %}{% endblock %}
+</main>
+
+<!-- ── Global spinner ─────────────────────────────────────────────────────── -->
+<div class="spinner-overlay" id="spinnerOverlay">
+  <div class="spinner"></div>
+  <div class="spinner-text">Analysing Document …</div>
+  <div id="scanSteps" class="scan-steps" style="margin-top:8px"></div>
+</div>
+
+<!-- ── Toast container ────────────────────────────────────────────────────── -->
+<div class="toast-container"></div>
+
+<!-- ── Scripts ────────────────────────────────────────────────────────────── -->
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

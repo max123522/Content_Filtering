@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}IAI Semantic DLP — Document Scanner{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <!-- ── Page header ──────────────────────────────────────────────────────── -->
+  <div class="page-header">
+    <div class="section-label">Israel Aerospace Industries · Data Loss Prevention</div>
+    <h1 class="page-title">
+      Document <span class="text-glow-blue">Security Scanner</span>
+    </h1>
+    <p class="page-subtitle">
+      Upload a document to run deep semantic analysis against the IAI classified terms knowledge base.
+    </p>
+  </div>
+
+  <!-- ── Stats bar ────────────────────────────────────────────────────────── -->
+  <div class="stats-bar">
+    <div class="stat-card">
+      <div class="stat-value" id="statTotal">—</div>
+      <div class="stat-label">Total Scans</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" style="color:var(--iai-red-bright)" id="statBlocked">—</div>
+      <div class="stat-label">Blocked</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" style="color:var(--iai-green-bright)" id="statApproved">—</div>
+      <div class="stat-label">Approved</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="statTerms">—</div>
+      <div class="stat-label">Known Terms</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" style="color:var(--iai-orange)" id="statBlockRate">—</div>
+      <div class="stat-label">Block Rate</div>
+    </div>
+  </div>
+
+  <!-- ── Main scan grid ───────────────────────────────────────────────────── -->
+  <div class="scan-grid">
+
+    <!-- Upload zone -->
+    <div>
+      <div class="section-label">Upload Document</div>
+      <div class="upload-zone glass-card" id="uploadZone">
+        <span class="upload-icon">📂</span>
+        <div class="upload-title">Drag &amp; Drop your document</div>
+        <div class="upload-subtitle">or click to browse files</div>
+        <div class="upload-formats">
+          <span class="format-badge">PDF</span>
+          <span class="format-badge">DOCX</span>
+          <span class="format-badge">DOC</span>
+        </div>
+        <input type="file" id="fileInput" accept=".pdf,.docx,.doc"
+               style="display:none" />
+      </div>
+    </div>
+
+    <!-- How it works panel -->
+    <div class="glass-card" style="padding:var(--space-xl)">
+      <div class="section-label">Analysis Pipeline</div>
+      <h3 class="font-display" style="font-size:1.2rem;color:var(--iai-silver-100);margin-bottom:var(--space-lg)">
+        7-Stage LangGraph Workflow
+      </h3>
+
+      <div style="display:flex;flex-direction:column;gap:var(--space-md)">
+        {% set steps = [
+          ('01', '📄', 'Document Parsing', 'PyMuPDF / python-docx text extraction'),
+          ('02', '🔍', 'Vector Detection', 'Snowflake Arctic Embed v2 similarity search'),
+          ('03', '🎯', 'BGE Reranking', 'Cross-encoder false-positive filtering'),
+          ('04', '💉', 'Context Injection', 'RAG retrieval of classified term descriptions'),
+          ('05', '🧠', 'LLM Reasoning', 'GPT-4o semantic context analysis'),
+          ('06', '⚖️', 'Aggregation', 'Segment decisions merged to document verdict'),
+          ('07', '🗄️', 'Audit Logging', 'Immutable scan record persisted to DB'),
+        ] %}
+        {% for num, icon, title, desc in steps %}
+        <div style="display:flex;gap:var(--space-md);align-items:flex-start">
+          <span style="font-family:var(--font-display);font-size:.7rem;color:var(--iai-blue-soft);min-width:24px;padding-top:2px">{{ num }}</span>
+          <span style="font-size:1.1rem;min-width:22px">{{ icon }}</span>
+          <div>
+            <div style="font-weight:600;font-size:.9rem;color:var(--iai-silver-100)">{{ title }}</div>
+            <div style="font-size:.8rem;color:var(--iai-silver-400);margin-top:2px">{{ desc }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div><!-- /scan-grid -->
+
+  <!-- ── Result panel ─────────────────────────────────────────────────────── -->
+  <div class="result-panel glass-card" id="resultPanel">
+    <div class="result-header" id="resultHeader">
+      <span class="result-icon" id="resultIcon"></span>
+      <div>
+        <div class="result-title" id="resultTitle"></div>
+        <div style="font-size:.8rem;color:var(--iai-silver-400);margin-top:2px">
+          IAI Semantic DLP Analysis Result
+        </div>
+      </div>
+    </div>
+    <div class="result-body" id="resultBody"></div>
+  </div>
+
+</div><!-- /page-container -->
+{% endblock %}

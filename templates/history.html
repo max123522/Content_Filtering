@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}IAI Semantic DLP — Audit Log{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <div class="page-header">
+    <div class="section-label">Transparency &amp; Accountability</div>
+    <h1 class="page-title">
+      Scan <span class="text-glow-blue">Audit Log</span>
+    </h1>
+    <p class="page-subtitle">
+      Every document scan is persisted here. Review decisions, reasoning, and confidence scores.
+    </p>
+  </div>
+
+  <!-- ── Filter bar ─────────────────────────────────────────────────────── -->
+  <div class="glass-card" style="padding:var(--space-md) var(--space-xl);margin-bottom:var(--space-xl);display:flex;gap:var(--space-md);align-items:center;flex-wrap:wrap">
+    <input type="text" id="filterInput" class="form-input" style="max-width:280px"
+           placeholder="Filter by filename or decision…" oninput="filterTable()" />
+    <select id="filterDecision" class="form-input" style="max-width:160px" onchange="filterTable()">
+      <option value="">All Decisions</option>
+      <option value="Blocked">🚨 Blocked</option>
+      <option value="Approved">✅ Approved</option>
+    </select>
+    <span style="margin-left:auto;font-size:.85rem;color:var(--iai-silver-400)">
+      <strong id="rowCount" style="color:var(--iai-silver-100)">{{ logs|length }}</strong> records
+    </span>
+  </div>
+
+  <!-- ── Table ──────────────────────────────────────────────────────────── -->
+  <div class="table-wrapper glass-card">
+    <table class="data-table" id="historyTable">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Timestamp</th>
+          <th>Filename</th>
+          <th>Decision</th>
+          <th>Confidence</th>
+          <th>Matched Terms</th>
+          <th>Reasoning</th>
+          <th>Feedback</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in logs %}
+        <tr class="log-row"
+            data-filename="{{ log.filename|lower }}"
+            data-decision="{{ log.decision }}">
+          <td style="color:var(--iai-silver-400);font-size:.8rem">#{{ log.id }}</td>
+          <td style="white-space:nowrap;font-size:.8rem;color:var(--iai-silver-400)">
+            {{ log.timestamp.strftime('%Y-%m-%d %H:%M') if log.timestamp else '—' }}
+          </td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ log.filename }}">
+            📄 {{ log.filename }}
+          </td>
+          <td>
+            {% if log.decision == 'Blocked' %}
+              <span class="badge-blocked">🚨 Blocked</span>
+            {% else %}
+              <span class="badge-approved">✅ Approved</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if log.confidence_score is not none %}
+              <div style="display:flex;align-items:center;gap:8px">
+                <div class="confidence-bar" style="width:80px">
+                  <div class="confidence-fill {% if log.confidence_score >= 0.7 %}high{% elif log.confidence_score >= 0.4 %}medium{% else %}low{% endif %}"
+                       style="width:{{ (log.confidence_score * 100)|round|int }}%"></div>
+                </div>
+                <span style="font-size:.8rem;color:var(--iai-silver-300)">{{ (log.confidence_score * 100)|round|int }}%</span>
+              </div>
+            {% else %}—{% endif %}
+          </td>
+          <td style="max-width:200px">
+            {% if log.matched_terms %}
+              <div style="display:flex;flex-wrap:wrap;gap:4px">
+                {% for t in log.matched_terms.split(',') %}
+                  {% if t.strip() %}
+                    <span class="term-chip" style="font-size:.72rem;padding:2px 10px">{{ t.strip() }}</span>
+                  {% endif %}
+                {% endfor %}
+              </div>
+            {% else %}
+              <span style="color:var(--iai-silver-500);font-size:.8rem">None</span>
+            {% endif %}
+          </td>
+          <td style="max-width:320px">
+            <div class="reasoning-excerpt" style="font-size:.8rem;color:var(--iai-silver-300);line-height:1.5;max-height:60px;overflow:hidden;cursor:pointer"
+                 onclick="toggleReasoning(this)"
+                 title="Click to expand">
+              {{ log.reasoning or '—' }}
+            </div>
+          </td>
+          <td style="white-space:nowrap">
+            {% if log.feedback == 'like' %}
+              <span style="color:var(--iai-green-bright)">👍 Like</span>
+            {% elif log.feedback == 'dislike' %}
+              <span style="color:var(--iai-red-bright)">👎 Dislike</span>
+            {% else %}
+              <span style="color:var(--iai-silver-500);font-size:.8rem">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" style="text-align:center;padding:48px;color:var(--iai-silver-400)">
+            No scan records yet. Upload a document to get started.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function filterTable() {
+  const text     = document.getElementById('filterInput').value.toLowerCase();
+  const decision = document.getElementById('filterDecision').value;
+  const rows     = document.querySelectorAll('#historyTable .log-row');
+  let visible    = 0;
+
+  rows.forEach(row => {
+    const matchText     = !text     || row.dataset.filename.includes(text);
+    const matchDecision = !decision || row.dataset.decision === decision;
+    const show = matchText && matchDecision;
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+
+  document.getElementById('rowCount').textContent = visible;
+}
+
+function toggleReasoning(el) {
+  const isExpanded = el.style.maxHeight === 'none';
+  el.style.maxHeight = isExpanded ? '60px' : 'none';
+  el.style.overflow  = isExpanded ? 'hidden' : 'visible';
+}
+</script>
+{% endblock %}

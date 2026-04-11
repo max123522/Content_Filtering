@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/Scripts/python -c \"import config; k = config.LLM_API_KEY; print\\('Provider:', config.LLM_PROVIDER\\); print\\('Key prefix:', k[:12]\\); print\\('Key length:', len\\(k\\)\\)\")",
+      "Bash(.venv/Scripts/python app_flask.py)"
+    ]
+  }
+}

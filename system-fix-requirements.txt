@@ -1,0 +1,17 @@
+
+I've completed a full system audit and I need you to fix the following issues to make the system fully operational:
+
+1. Critical Embedding Fix:
+- The scanner is currently failing with the error: "Analysis error: Embedding failed: please install xformers".
+- Action: Remove any dependency on 'xformers'. Force the 'EmbeddingService' to strictly use 'intfloat/multilingual-e5-base' (which we already have) and ensure it runs on CPU. Update 'config.py' and 'embedding_service.py' to reflect this.
+
+2. Admin Panel & DB Logic:
+- Manual Add: When I add a term manually via the UI, it saves to SQLite but the 'Embedded' status remains false. Ensure that adding a term automatically triggers the embedding process and saves it to the Vector DB.
+- Edit Functionality: The 'Edit' button is currently unresponsive. Please fix the backend route and frontend logic so I can update term names/descriptions. Ensure that editing a term also updates its vector in the Vector DB.
+- Delete Sync: Verify that deleting a term from the UI removes it from both SQLite and the Vector DB (Chroma/FAISS).
+
+3. Reranker Verification:
+- Ensure the 'bge-reranker-base' model is correctly loaded and integrated into the LangGraph workflow. It should provide a score that helps distinguish between "Arrow" (the project) and "Arrow" (archery). i have two documents in folder documents. you can scan them
+
+
+Please run a test scan after these fixes to ensure the 'xformers' error is gone and the Audit Log shows a successful analysis.

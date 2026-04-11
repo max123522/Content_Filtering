@@ -1,0 +1,188 @@
+/*
+ * brand_identity.css — IAI Corporate Brand Identity
+ *
+ * Colours extracted from https://www.iai.co.il (Israel Aerospace Industries).
+ * Light theme — white/light-gray background, IAI blue primary, dark navy text.
+ */
+
+/* ── Google Font ──────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Rajdhani:wght@500;600;700&display=swap');
+
+/* ── Brand Colour Palette (IAI Light Theme) ───────────────────────────────── */
+:root {
+  /* IAI Navy — used for header, text, structure */
+  --iai-navy:          #06183a;
+  --iai-navy-dark:     #04102a;
+  --iai-navy-mid:      #112337;
+  --iai-navy-soft:     #1a3a6b;
+
+  /* IAI Blue — primary interactive color */
+  --iai-blue:          #1c48f0;
+  --iai-blue-hover:    #1238d0;
+  --iai-blue-light:    #e8eeff;
+  --iai-blue-border:   #a1b5ff;
+
+  /* IAI Orange — call-to-action accent */
+  --iai-orange:        #ff7701;
+  --iai-orange-light:  #fff3e8;
+
+  /* IAI Green — success/approved */
+  --iai-green:         #25b05f;
+  --iai-green-light:   #e8f8ee;
+
+  /* IAI Red — blocked/error */
+  --iai-red:           #e02040;
+  --iai-red-light:     #fdecea;
+
+  /* Backgrounds */
+  --bg-page:           #f7f7f7;
+  --bg-white:          #ffffff;
+  --bg-section:        #f0f3fa;
+
+  /* Text */
+  --text-primary:      #191e34;
+  --text-secondary:    #4a5568;
+  --text-muted:        #6e6e6e;
+  --text-light:        #bebebe;
+
+  /* Borders */
+  --border-color:      #e2e8f0;
+  --border-blue:       #a1b5ff;
+
+  /* Surfaces */
+  --card-bg:           #ffffff;
+  --card-border:       #e2e8f0;
+  --card-shadow:       0 2px 12px rgba(6, 24, 58, 0.08);
+  --card-shadow-hover: 0 6px 24px rgba(6, 24, 58, 0.14);
+
+  /* Kept for backward compat — map to light equivalents */
+  --iai-navy-900:      #f7f7f7;
+  --iai-navy-800:      #f0f3fa;
+  --iai-navy-700:      #e8eef8;
+  --iai-silver-100:    #191e34;
+  --iai-silver-200:    #2d3748;
+  --iai-silver-300:    #4a5568;
+  --iai-silver-400:    #6e6e6e;
+  --iai-silver-500:    #bebebe;
+  --iai-blue-bright:   #1c48f0;
+  --iai-blue-glow:     #1238d0;
+  --iai-blue-soft:     #4a6fa5;
+  --iai-green-bright:  #25b05f;
+  --iai-green-glow:    #1d9050;
+  --iai-red-bright:    #e02040;
+  --iai-red-glow:      #c01830;
+  --iai-yellow:        #f59e0b;
+  --glass-bg:          #ffffff;
+  --glass-border:      #e2e8f0;
+  --glass-highlight:   rgba(255,255,255,0.8);
+  --glass-shadow:      0 2px 12px rgba(6, 24, 58, 0.08);
+
+  /* Typography */
+  --font-primary:  'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-display:  'Rajdhani', 'Inter', sans-serif;
+  --font-mono:     'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+
+  /* Spacing */
+  --space-xs:  4px;
+  --space-sm:  8px;
+  --space-md:  16px;
+  --space-lg:  24px;
+  --space-xl:  40px;
+  --space-2xl: 64px;
+
+  /* Border radius */
+  --radius-sm:  6px;
+  --radius-md:  12px;
+  --radius-lg:  16px;
+  --radius-xl:  32px;
+
+  /* Transitions */
+  --transition-fast:   0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow:   0.5s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Z-index */
+  --z-base:    1;
+  --z-card:    10;
+  --z-overlay: 100;
+  --z-modal:   1000;
+  --z-toast:   2000;
+}
+
+/* ── Typography helpers ───────────────────────────────────────────────────── */
+.font-display { font-family: var(--font-display); letter-spacing: 0.04em; }
+.font-mono    { font-family: var(--font-mono); }
+
+/* ── Glass card — now a clean white card ──────────────────────────────────── */
+.glass-card {
+  background:    var(--card-bg);
+  border:        1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow:    var(--card-shadow);
+}
+
+/* ── IAI Primary Button ───────────────────────────────────────────────────── */
+.btn-iai {
+  display:         inline-flex;
+  align-items:     center;
+  gap:             var(--space-sm);
+  padding:         11px 28px;
+  background:      var(--iai-blue);
+  color:           #ffffff;
+  font-family:     var(--font-display);
+  font-weight:     600;
+  font-size:       0.95rem;
+  letter-spacing:  0.06em;
+  text-transform:  uppercase;
+  border:          none;
+  border-radius:   var(--radius-sm);
+  cursor:          pointer;
+  transition:      var(--transition-normal);
+  text-decoration: none;
+  box-shadow:      0 2px 8px rgba(28, 72, 240, 0.3);
+}
+
+.btn-iai:hover {
+  background:  var(--iai-blue-hover);
+  box-shadow:  0 4px 16px rgba(28, 72, 240, 0.4);
+  transform:   translateY(-1px);
+  color:       #ffffff;
+}
+
+.btn-iai:active { transform: translateY(0); }
+
+/* ── Status badges ────────────────────────────────────────────────────────── */
+.badge-approved {
+  display:        inline-flex;
+  align-items:    center;
+  gap:            6px;
+  padding:        4px 12px;
+  background:     var(--iai-green-light);
+  color:          var(--iai-green);
+  border:         1px solid #a7e8c4;
+  border-radius:  var(--radius-xl);
+  font-size:      0.78rem;
+  font-weight:    600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.badge-blocked {
+  display:        inline-flex;
+  align-items:    center;
+  gap:            6px;
+  padding:        4px 12px;
+  background:     var(--iai-red-light);
+  color:          var(--iai-red);
+  border:         1px solid #f5b8c2;
+  border-radius:  var(--radius-xl);
+  font-size:      0.78rem;
+  font-weight:    600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ── Glow text — replaced with solid color on light bg ───────────────────── */
+.text-glow-blue  { color: var(--iai-blue); }
+.text-glow-green { color: var(--iai-green); }
+.text-glow-red   { color: var(--iai-red); }
