@@ -89,9 +89,24 @@ FLASK_PORT: int = int(os.getenv("FLASK_PORT", "5000"))
 # ---------------------------------------------------------------------------
 # Analysis settings
 # ---------------------------------------------------------------------------
-SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", "0.65"))
-TOP_K_TERMS: int = int(os.getenv("TOP_K_TERMS", "20"))
+SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", "0.0"))
+TOP_K_TERMS: int = int(os.getenv("TOP_K_TERMS", "10"))
 SEGMENT_WINDOW_SIZE: int = int(os.getenv("SEGMENT_WINDOW_SIZE", "150"))
+
+
+def reload_analysis_settings() -> None:
+    """
+    Hot-reload analysis tuning parameters from .env without server restart.
+
+    Call this at the start of each analysis run so that changes to
+    SIMILARITY_THRESHOLD, TOP_K_TERMS, and SEGMENT_WINDOW_SIZE in .env
+    take effect immediately.
+    """
+    global SIMILARITY_THRESHOLD, TOP_K_TERMS, SEGMENT_WINDOW_SIZE
+    load_dotenv(_BASE_DIR / ".env", override=True)
+    SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.0"))
+    TOP_K_TERMS          = int(os.getenv("TOP_K_TERMS",            "10"))
+    SEGMENT_WINDOW_SIZE  = int(os.getenv("SEGMENT_WINDOW_SIZE",    "150"))
 
 # ---------------------------------------------------------------------------
 # Concurrency settings

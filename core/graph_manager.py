@@ -307,7 +307,12 @@ def node_llm_reason(state: DLPState) -> DLPState:
 
 
 def node_aggregate_decision(state: DLPState) -> DLPState:
-    """Node 6 — Ensure a final decision exists (handles error paths)."""
+    """Node 6 — Ensure a final decision exists (handles error paths).
+
+    matched_terms is always overridden with the top-K embedding candidates
+    sorted by score, so the user sees the most relevant terms regardless of
+    what the LLM chose to mention in its reasoning.
+    """
     if state.final_decision is None:
         if state.error:
             state.final_decision = DLPDecision(
@@ -323,6 +328,26 @@ def node_aggregate_decision(state: DLPState) -> DLPState:
                 confidence_score=1.0,
                 matched_terms=[],
             )
+
+    # Approved → no forbidden terms shown in UI / audit log.
+    if state.final_decision.decision == "Approved":
+        state.final_decision.matched_terms = []
+        return state
+
+    # Blocked → show top-K candidates from embedding, sorted by score.
+    # For each term keep only its highest score across all segments,
+    # then take the top TOP_K_TERMS entries.
+    if state.candidate_hits:
+        term_scores: dict[str, float] = {}
+        for seg_hits in state.candidate_hits:
+            for term, _ctx, score in seg_hits:
+                if term not in term_scores or score > term_scores[term]:
+                    term_scores[term] = score
+        sorted_terms = sorted(term_scores.items(), key=lambda x: x[1], reverse=True)
+        state.final_decision.matched_terms = [
+            t for t, _ in sorted_terms[: config.TOP_K_TERMS]
+        ]
+
     return state
 
 
@@ -412,6 +437,8 @@ def run_analysis(
     Returns:
         Final DLPState with decision, reasoning, and log_id populated.
     """
+    # Hot-reload tuning params so .env changes take effect without restart.
+    config.reload_analysis_settings()
     graph = get_graph()
     initial_state = DLPState(file_bytes=file_bytes, filename=filename)
     result = graph.invoke(initial_state)
