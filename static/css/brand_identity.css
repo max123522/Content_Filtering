@@ -5,8 +5,8 @@
  * Light theme — white/light-gray background, IAI blue primary, dark navy text.
  */
 
-/* ── Google Font ──────────────────────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Rajdhani:wght@500;600;700&display=swap');
+/* ── Local Fonts (no external requests — works in closed PROD network) ────── */
+@import url('/static/css/fonts_local.css');
 
 /* ── Brand Colour Palette (IAI Light Theme) ───────────────────────────────── */
 :root {

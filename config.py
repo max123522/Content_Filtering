@@ -42,18 +42,30 @@ else:  # openai (default)
     LLM_MODEL: str = os.getenv("DEV_LLM_MODEL", "gpt-4o")
 
 # ---------------------------------------------------------------------------
-# Embedding model (always local – Snowflake Arctic v2)
+# Embedding model
 # ---------------------------------------------------------------------------
+# DEV:  runs locally via SentenceTransformer (no external calls).
+# PROD: calls the IAI on-prem embedding endpoint (OpenAI-compatible API).
 # Force multilingual-e5-base — no xformers dependency, runs on CPU.
 # Snowflake Arctic requires xformers (Linux/GPU only); do NOT use it here.
-EMBEDDING_MODEL_NAME: str = "intfloat/multilingual-e5-base"
+EMBEDDING_MODEL_NAME: str = os.getenv("EMBEDDING_MODEL_NAME", "intfloat/multilingual-e5-base")
+
+if ENV == "PROD":
+    EMBED_BASE_URL: str = os.getenv("PROD_LLM_BASE_URL_EMBED", "")
+    EMBED_API_KEY: str = os.getenv("PROD_LLM_API_KEY", "na")
+    EMBED_MODEL: str = os.getenv("PROD_EMBED_MODEL", EMBEDDING_MODEL_NAME)
+else:
+    EMBED_BASE_URL: str | None = None
+    EMBED_API_KEY: str = ""
+    EMBED_MODEL: str = EMBEDDING_MODEL_NAME
 
 # ---------------------------------------------------------------------------
-# Reranker model (always local – BGE)
+# Reranker model (local only – disabled in PROD, no internet in closed env)
 # ---------------------------------------------------------------------------
 RERANKER_MODEL_NAME: str = os.getenv(
     "RERANKER_MODEL_NAME", "BAAI/bge-reranker-base"
 )
+ENABLE_RERANKER: bool = ENV != "PROD"
 
 # ---------------------------------------------------------------------------
 # Database

@@ -159,6 +159,14 @@ def node_rerank_candidates(state: DLPState) -> DLPState:
     if state.error or not state.candidate_hits:
         return state
 
+    if not config.ENABLE_RERANKER:
+        # PROD: reranker disabled (no internet in closed env) — pass through raw hits
+        state.reranked_hits = [
+            [(term, score) for term, _, score in hits]
+            for hits in state.candidate_hits
+        ]
+        return state
+
     try:
         from models.reranker_service import RerankerService
         reranker = RerankerService()
