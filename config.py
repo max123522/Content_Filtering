@@ -89,6 +89,18 @@ FLASK_PORT: int = int(os.getenv("FLASK_PORT", "5000"))
 # ---------------------------------------------------------------------------
 # Analysis settings
 # ---------------------------------------------------------------------------
-SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", "0.45"))
-TOP_K_TERMS: int = int(os.getenv("TOP_K_TERMS", "5"))
+SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", "0.65"))
+TOP_K_TERMS: int = int(os.getenv("TOP_K_TERMS", "20"))
 SEGMENT_WINDOW_SIZE: int = int(os.getenv("SEGMENT_WINDOW_SIZE", "150"))
+
+# ---------------------------------------------------------------------------
+# Concurrency settings
+# ---------------------------------------------------------------------------
+# MAX_PARALLEL_DOCS   — max files accepted in a single /scan request
+# MAX_LLM_CONCURRENCY — max parallel LLM calls per document (protects IAI LLM server)
+# MAX_TOTAL_ANALYSES  — global semaphore: max simultaneous analyses across ALL users
+# TERMS_CACHE_TTL     — seconds to cache forbidden-terms list in memory
+MAX_PARALLEL_DOCS: int   = int(os.getenv("MAX_PARALLEL_DOCS",   "5"))
+MAX_LLM_CONCURRENCY: int = int(os.getenv("MAX_LLM_CONCURRENCY", "3"))
+MAX_TOTAL_ANALYSES: int  = int(os.getenv("MAX_TOTAL_ANALYSES",  "10"))
+TERMS_CACHE_TTL: int     = int(os.getenv("TERMS_CACHE_TTL",     "300"))

@@ -9,6 +9,7 @@ the pipeline.
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -196,10 +197,14 @@ def analyze_full_document(
     segments_with_context: list[tuple[str, list[tuple[str, str]], list[str]]],
 ) -> DLPDecision:
     """
-    Analyse all segments and aggregate into a single document-level decision.
+    Analyse all segments in parallel and aggregate into a single decision.
 
     Strategy: ANY 'Blocked' segment blocks the whole document.
     Final confidence = mean of all segment confidences.
+
+    Parallelism is bounded by config.MAX_LLM_CONCURRENCY to avoid
+    overloading the IAI on-prem LLM server.  Each segment's LLM call is
+    independent (no shared state), so concurrent execution is safe.
 
     Args:
         segments_with_context: List of (segment, injected_contexts, candidate_terms).
@@ -214,21 +219,49 @@ def analyze_full_document(
             confidence_score=1.0,
         )
 
-    decisions: list[DLPDecision] = []
-    for segment, contexts, candidates in segments_with_context:
-        d = analyze_segment(segment, contexts, candidates)
-        decisions.append(d)
+    n = len(segments_with_context)
+    decisions: list[DLPDecision | None] = [None] * n
 
-    blocked = [d for d in decisions if d.decision == "Blocked"]
-    all_matched = list({t for d in decisions for t in d.matched_terms})
-    avg_confidence = sum(d.confidence_score for d in decisions) / len(decisions)
+    with ThreadPoolExecutor(max_workers=min(n, config.MAX_LLM_CONCURRENCY)) as pool:
+        future_to_idx = {
+            pool.submit(analyze_segment, seg, ctx, cand): i
+            for i, (seg, ctx, cand) in enumerate(segments_with_context)
+        }
+        for future in as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            try:
+                decisions[idx] = future.result()
+            except Exception as exc:
+                # Safe-fail: treat any unhandled exception as Blocked.
+                decisions[idx] = DLPDecision(
+                    decision="Blocked",
+                    reasoning=(
+                        f"Segment analysis raised an unexpected error ({exc}). "
+                        "Defaulting to Blocked for safety."
+                    ),
+                    confidence_score=0.0,
+                    matched_terms=[],
+                )
+
+    # All slots must be filled — guard against any future.result() gap.
+    for i, d in enumerate(decisions):
+        if d is None:
+            decisions[i] = DLPDecision(
+                decision="Blocked",
+                reasoning="Segment result missing. Defaulting to Blocked for safety.",
+                confidence_score=0.0,
+                matched_terms=[],
+            )
+
+    blocked = [d for d in decisions if d.decision == "Blocked"]  # type: ignore[union-attr]
+    all_matched = list({t for d in decisions for t in d.matched_terms})  # type: ignore[union-attr]
+    avg_confidence = sum(d.confidence_score for d in decisions) / n  # type: ignore[union-attr]
 
     if blocked:
-        # Merge all blocked reasoning
         combined_reasoning = " | ".join(
-            f"[Seg {i+1}]: {d.reasoning}"
+            f"[Seg {i + 1}]: {d.reasoning}"
             for i, d in enumerate(decisions)
-            if d.decision == "Blocked"
+            if d and d.decision == "Blocked"
         )
         return DLPDecision(
             decision="Blocked",
@@ -236,10 +269,11 @@ def analyze_full_document(
             confidence_score=avg_confidence,
             matched_terms=all_matched,
         )
-    else:
-        return DLPDecision(
-            decision="Approved",
-            reasoning=decisions[0].reasoning if decisions else "Document is clean.",
-            confidence_score=avg_confidence,
-            matched_terms=[],
-        )
+
+    first = next((d for d in decisions if d), None)
+    return DLPDecision(
+        decision="Approved",
+        reasoning=first.reasoning if first else "Document is clean.",
+        confidence_score=avg_confidence,
+        matched_terms=[],
+    )

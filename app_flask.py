@@ -14,7 +14,8 @@ Routes:
 
 from __future__ import annotations
 
-import os
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from flask import (
@@ -37,6 +38,7 @@ from data.db_handler import (
     ForbiddenTerm,
     AnalysisLog,
 )
+from core.graph_manager import invalidate_terms_cache
 
 # ---------------------------------------------------------------------------
 # App factory
@@ -47,6 +49,15 @@ app.secret_key = config.FLASK_SECRET_KEY
 
 # Ensure DB exists on startup
 init_db()
+
+# ---------------------------------------------------------------------------
+# Global concurrency guard
+# ---------------------------------------------------------------------------
+# Limits the total number of simultaneous document analyses across ALL users.
+# Prevents overloading the IAI on-prem LLM / embedding servers.
+# If all slots are taken, the request waits up to 5 minutes before returning
+# a "Server busy" error.
+_analysis_semaphore = threading.Semaphore(config.MAX_TOTAL_ANALYSES)
 
 
 # ---------------------------------------------------------------------------
@@ -62,38 +73,85 @@ def index():
 @app.route("/scan", methods=["POST"])
 def scan():
     """
-    Receive an uploaded document, run the DLP pipeline, return JSON.
+    Accept 1–MAX_PARALLEL_DOCS documents and run the DLP pipeline.
 
-    Expected multipart field: `document` (file upload).
+    Single-file request  (field name: ``document``)
+        → returns a flat JSON object (backwards compatible with existing UI).
+
+    Multi-file request   (field name: ``documents``, up to MAX_PARALLEL_DOCS)
+        → returns a JSON array, one result object per file, in upload order.
+
+    Each analysis acquires a slot from _analysis_semaphore so that the total
+    number of concurrent analyses across all users never exceeds
+    MAX_TOTAL_ANALYSES.  Files in a multi-file request are analysed in
+    parallel (bounded by the semaphore).
+
+    File bytes are read from Werkzeug streams before spawning threads —
+    Werkzeug request objects are not thread-safe.
     """
-    if "document" not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
-
-    uploaded = request.files["document"]
-    if not uploaded.filename:
-        return jsonify({"error": "Empty filename"}), 400
-
-    filename = uploaded.filename
-    file_bytes = uploaded.read()
-
-    # Lazy import — avoid loading heavy models at app startup
     from core.graph_manager import run_analysis
 
-    try:
-        state = run_analysis(file_bytes=file_bytes, filename=filename)
-        decision = state.final_decision
+    # ── Collect uploaded files ────────────────────────────────────────
+    raw_files = request.files.getlist("documents")
+    if not raw_files:
+        single = request.files.get("document")
+        if single:
+            raw_files = [single]
+
+    files = [f for f in raw_files if f and f.filename]
+    if not files:
+        return jsonify({"error": "No files uploaded"}), 400
+
+    if len(files) > config.MAX_PARALLEL_DOCS:
         return jsonify(
-            {
+            {"error": f"Maximum {config.MAX_PARALLEL_DOCS} documents per request"}
+        ), 400
+
+    # Read all bytes NOW — Werkzeug streams must not be accessed from threads.
+    file_data: list[tuple[str, bytes]] = [
+        (f.filename, f.read()) for f in files
+    ]
+
+    # ── Worker function (runs inside a thread) ────────────────────────
+    def _analyse(filename: str, file_bytes: bytes) -> dict:
+        """Acquire a semaphore slot, run analysis, release slot."""
+        acquired = _analysis_semaphore.acquire(timeout=300)  # 5-min timeout
+        if not acquired:
+            return {
+                "filename": filename,
+                "error": "Server busy — too many concurrent analyses. Please retry.",
+            }
+        try:
+            state = run_analysis(file_bytes=file_bytes, filename=filename)
+            decision = state.final_decision
+            return {
+                "filename": filename,
                 "decision": decision.decision,
                 "reasoning": decision.reasoning,
                 "confidence_score": round(decision.confidence_score, 3),
                 "matched_terms": decision.matched_terms,
                 "log_id": state.log_id,
-                "filename": filename,
             }
-        )
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+        except Exception as exc:
+            return {"filename": filename, "error": str(exc)}
+        finally:
+            _analysis_semaphore.release()
+
+    # ── Single file — return flat dict (UI backwards compatible) ──────
+    if len(file_data) == 1:
+        return jsonify(_analyse(*file_data[0]))
+
+    # ── Multiple files — process in parallel, preserve upload order ───
+    results: list[dict | None] = [None] * len(file_data)
+    with ThreadPoolExecutor(max_workers=len(file_data)) as pool:
+        future_map = {
+            pool.submit(_analyse, fname, fbytes): i
+            for i, (fname, fbytes) in enumerate(file_data)
+        }
+        for future in as_completed(future_map):
+            results[future_map[future]] = future.result()
+
+    return jsonify(results)
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +191,7 @@ def admin_add_term():
         from models.embedding_service import EmbeddingService
         import json as _json
         emb = EmbeddingService()
-        vec = emb.encode(term_text)
+        vec = emb.encode(term_text, is_query=False)
         embedding_json = _json.dumps(vec.tolist())
         embedded = True
     except Exception as exc:
@@ -144,6 +202,7 @@ def admin_add_term():
         context_description=context or None,
         embedding_json=embedding_json,
     )
+    invalidate_terms_cache()
 
     return jsonify({"term": term_text, "embedded": embedded})
 
@@ -159,6 +218,7 @@ def admin_delete_term(term_id: int):
             session.commit()
     finally:
         session.close()
+    invalidate_terms_cache()
     return redirect(url_for("admin"))
 
 
@@ -181,13 +241,14 @@ def admin_edit_term(term_id: int):
             from models.embedding_service import EmbeddingService
             import json as _json
             emb = EmbeddingService()
-            vec = emb.encode(term.term)
+            vec = emb.encode(term.term, is_query=False)
             term.embedding_json = _json.dumps(vec.tolist())
         except Exception as exc:
             print(f"[admin_edit_term] Re-embedding failed: {exc}")
         session.commit()
     finally:
         session.close()
+    invalidate_terms_cache()
     return redirect(url_for("admin"))
 
 
@@ -237,4 +298,5 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=config.FLASK_PORT,
         debug=config.FLASK_DEBUG,
+        threaded=True,   # Handle each HTTP request in its own thread.
     )

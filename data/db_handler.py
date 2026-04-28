@@ -26,6 +26,7 @@ from sqlalchemy import (
     String,
     Text,
     create_engine,
+    event as _sa_event,
 )
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -114,10 +115,32 @@ class AnalysisLog(Base):
 # Engine & Session factory
 # ---------------------------------------------------------------------------
 def get_engine(database_url: str = config.DATABASE_URL):
-    """Return a SQLAlchemy engine, creating parent directories for SQLite."""
+    """
+    Return a SQLAlchemy engine, creating parent directories for SQLite.
+
+    For SQLite:
+      - check_same_thread=False  — allows the same connection to be used
+        across threads (required for multi-threaded Flask).
+      - WAL journal mode          — multiple readers + one writer can proceed
+        concurrently without "database is locked" errors.
+      - synchronous=NORMAL        — safe durability without full fsync overhead.
+    """
     if database_url.startswith("sqlite:///"):
         db_path = Path(database_url.replace("sqlite:///", ""))
         db_path.parent.mkdir(parents=True, exist_ok=True)
+        engine = create_engine(
+            database_url,
+            echo=False,
+            future=True,
+            connect_args={"check_same_thread": False},
+        )
+
+        @_sa_event.listens_for(engine, "connect")
+        def _set_sqlite_pragmas(dbapi_conn, _record) -> None:
+            dbapi_conn.execute("PRAGMA journal_mode=WAL")
+            dbapi_conn.execute("PRAGMA synchronous=NORMAL")
+
+        return engine
     return create_engine(database_url, echo=False, future=True)
 
 

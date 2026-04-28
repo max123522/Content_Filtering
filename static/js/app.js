@@ -177,32 +177,108 @@ async function submitFeedback(logId, value) {
   }
 }
 
-/* ── File upload & scan ─────────────────────────────────────────────────── */
-async function uploadAndScan(file) {
-  const spinner = $('spinnerOverlay');
-  const panel   = $('resultPanel');
-  if (panel) hide(panel);
-
-  show(spinner);
-
-  // Animate steps in parallel
-  animateScanSteps();
-
+/* ── Single file scan ───────────────────────────────────────────────────── */
+async function scanOne(file) {
   const formData = new FormData();
   formData.append('document', file);
+  const res  = await fetch('/scan', { method: 'POST', body: formData });
+  return res.json();
+}
+
+/* ── Multi-result card renderer ─────────────────────────────────────────── */
+function renderMultiResultCard(data) {
+  const isBlocked = data.decision === 'Blocked';
+  const statusCls = isBlocked ? 'blocked' : 'approved';
+  const icon      = isBlocked ? '🚨' : '✅';
+  const pct       = Math.round((data.confidence_score || 0) * 100);
+  let   cfillCls  = pct < 40 ? 'low' : pct < 70 ? 'medium' : 'high';
+
+  const terms = (data.matched_terms || []).length
+    ? `<div style="margin-top:8px">
+         <span class="section-label" style="font-size:.7rem">Matched Terms</span>
+         <div class="terms-list" style="margin-top:4px">
+           ${data.matched_terms.map(t => `<span class="term-chip">${t}</span>`).join('')}
+         </div>
+       </div>` : '';
+
+  const card = document.createElement('div');
+  card.className = `glass-card result-card-multi ${statusCls}`;
+  card.style.cssText = 'padding:var(--space-lg);border-left:4px solid ' +
+    (isBlocked ? 'var(--iai-red)' : 'var(--iai-green)');
+  card.innerHTML = `
+    <div style="display:flex;align-items:center;gap:var(--space-sm);margin-bottom:var(--space-sm)">
+      <span style="font-size:1.3rem">${icon}</span>
+      <span style="font-family:var(--font-display);font-weight:700;font-size:1rem;
+                   color:${isBlocked ? 'var(--iai-red)' : 'var(--iai-green)'}">${data.decision}</span>
+      <span style="margin-left:auto;font-size:.8rem;color:var(--iai-silver-400)">${data.filename || ''}</span>
+    </div>
+    <div class="confidence-bar-container" style="margin-bottom:var(--space-sm)">
+      <div class="confidence-bar">
+        <div class="confidence-fill ${cfillCls}" style="width:0%" data-target="${pct}"></div>
+      </div>
+      <span style="font-family:var(--font-display);font-size:.85rem;font-weight:600;
+                   color:var(--iai-silver-100);min-width:38px">${pct}%</span>
+    </div>
+    <div style="font-size:.82rem;color:var(--iai-silver-300);line-height:1.5">${data.reasoning || ''}</div>
+    ${terms}
+    <div style="margin-top:8px;font-size:.75rem;color:var(--iai-silver-400)">Log #${data.log_id || '—'}</div>
+  `;
+  return card;
+}
+
+/* ── Upload & scan — handles 1 or many files ────────────────────────────── */
+async function uploadAndScan(files) {
+  if (!files || files.length === 0) return;
+
+  const MAX_FILES = 5;
+  if (files.length > MAX_FILES) {
+    showToast(`Maximum ${MAX_FILES} files at once.`, 'warning');
+    files = Array.from(files).slice(0, MAX_FILES);
+  }
+
+  const spinner    = $('spinnerOverlay');
+  const singlePanel = $('resultPanel');
+  const multiPanel  = $('multiResultPanel');
+  const multiCards  = $('multiResultCards');
+
+  hide(singlePanel);
+  if (multiPanel) multiPanel.style.display = 'none';
+
+  show(spinner);
+  animateScanSteps();
 
   try {
-    const res  = await fetch('/scan', { method: 'POST', body: formData });
-    const data = await res.json();
+    if (files.length === 1) {
+      // ── Single file — existing UI path ──────────────────────────
+      const data = await scanOne(files[0]);
+      hide(spinner);
+      if (data.error) { showToast(`Error: ${data.error}`, 'error'); return; }
+      renderResult(data);
+    } else {
+      // ── Multiple files — send in parallel, show cards ────────────
+      const promises = Array.from(files).map(f => scanOne(f));
+      const results  = await Promise.all(promises);
+      hide(spinner);
 
-    hide(spinner);
+      if (multiCards) multiCards.innerHTML = '';
+      let hasError = false;
+      results.forEach(data => {
+        if (data.error) {
+          showToast(`${data.filename || 'File'}: ${data.error}`, 'error');
+          hasError = true;
+          return;
+        }
+        const card = renderMultiResultCard(data);
+        if (multiCards) multiCards.appendChild(card);
+      });
 
-    if (data.error) {
-      showToast(`Error: ${data.error}`, 'error');
-      return;
+      if (multiPanel && multiCards && multiCards.children.length > 0) {
+        multiPanel.style.display = 'block';
+        animateBars();
+        multiPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+      if (hasError && multiCards && multiCards.children.length === 0) return;
     }
-
-    renderResult(data);
     loadStats();
   } catch (err) {
     hide(spinner);
@@ -219,8 +295,10 @@ function initDropZone() {
   zone.addEventListener('click', () => input.click());
 
   input.addEventListener('change', e => {
-    const file = e.target.files[0];
-    if (file) uploadAndScan(file);
+    const files = e.target.files;
+    if (files && files.length) uploadAndScan(files);
+    // Reset so the same file(s) can be re-uploaded if needed.
+    input.value = '';
   });
 
   zone.addEventListener('dragover', e => {
@@ -233,8 +311,8 @@ function initDropZone() {
   zone.addEventListener('drop', e => {
     e.preventDefault();
     zone.classList.remove('drag-over');
-    const file = e.dataTransfer.files[0];
-    if (file) uploadAndScan(file);
+    const files = e.dataTransfer.files;
+    if (files && files.length) uploadAndScan(files);
   });
 }
 

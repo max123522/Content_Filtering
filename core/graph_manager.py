@@ -16,6 +16,8 @@ State flows strictly forward; there are no cycles in the analysis path.
 from __future__ import annotations
 
 import json
+import threading
+import time
 from pathlib import Path
 from typing import Optional, Union
 
@@ -30,6 +32,62 @@ from data.db_handler import (
     log_analysis,
     ForbiddenTerm,
 )
+
+
+# ---------------------------------------------------------------------------
+# Thread-safe forbidden-terms cache
+# ---------------------------------------------------------------------------
+# Loading all terms + their embeddings from the DB on every request wastes
+# time and DB connections.  This module-level cache is refreshed at most once
+# every TERMS_CACHE_TTL seconds.  Writes (add / edit / delete term) must call
+# invalidate_terms_cache() so the next request picks up the change.
+
+_terms_cache: list[dict] | None = None
+_terms_cache_lock: threading.Lock = threading.Lock()
+_terms_cache_ts: float = 0.0
+
+
+def _get_cached_terms() -> list[dict]:
+    """
+    Return cached forbidden terms as plain dicts (thread-safe, TTL-based).
+
+    Each dict has keys: id, term, context, embedding_json.
+    Plain dicts avoid SQLAlchemy session-detachment issues across threads.
+    """
+    global _terms_cache, _terms_cache_ts
+    now = time.monotonic()
+    # Fast path — no lock if cache is warm.
+    if _terms_cache is not None and (now - _terms_cache_ts) < config.TERMS_CACHE_TTL:
+        return _terms_cache
+    with _terms_cache_lock:
+        # Re-check inside lock (another thread may have just refreshed).
+        if _terms_cache is not None and (now - _terms_cache_ts) < config.TERMS_CACHE_TTL:
+            return _terms_cache
+        db_terms = get_all_terms()
+        _terms_cache = [
+            {
+                "id": t.id,
+                "term": t.term,
+                "context": t.context_description or "",
+                "embedding_json": t.embedding_json,
+            }
+            for t in db_terms
+        ]
+        _terms_cache_ts = time.monotonic()
+        print(f"[graph_manager] Terms cache refreshed ({len(_terms_cache)} terms)")
+        return _terms_cache
+
+
+def invalidate_terms_cache() -> None:
+    """
+    Force the next request to reload terms from the DB.
+
+    Must be called by admin routes after any add / edit / delete operation.
+    """
+    global _terms_cache
+    with _terms_cache_lock:
+        _terms_cache = None
+    print("[graph_manager] Terms cache invalidated")
 
 
 # ---------------------------------------------------------------------------
@@ -87,18 +145,18 @@ def node_detect_candidates(state: DLPState) -> DLPState:
         import numpy as np
 
         emb = EmbeddingService()
-        db_terms: list[ForbiddenTerm] = get_all_terms()
+        # Use cached terms — avoids a DB round-trip on every document.
+        cached_terms = _get_cached_terms()
 
-        # Build parallel term list and embedding matrix
         term_records: list[dict] = []
         valid_vecs: list[list[float]] = []
 
-        for t in db_terms:
-            if t.embedding_json:
+        for t in cached_terms:
+            if t["embedding_json"]:
                 try:
-                    vec = json.loads(t.embedding_json)
+                    vec = json.loads(t["embedding_json"])
                     term_records.append(
-                        {"id": t.id, "term": t.term, "context": t.context_description or ""}
+                        {"id": t["id"], "term": t["term"], "context": t["context"]}
                     )
                     valid_vecs.append(vec)
                 except Exception:
@@ -107,15 +165,18 @@ def node_detect_candidates(state: DLPState) -> DLPState:
         state.all_terms = term_records
 
         if not valid_vecs:
-            # No embeddings available — fallback to substring match
-            state.candidate_hits = _fallback_substring(state.segments, db_terms)
+            # No embeddings available — fallback to substring match.
+            state.candidate_hits = _fallback_substring(state.segments, cached_terms)
             return state
 
         term_matrix = np.array(valid_vecs, dtype=np.float32)
-        candidate_hits: list[list[tuple[str, str, float]]] = []
 
-        for segment in state.segments:
-            q_vec = emb.encode(segment)
+        # Encode ALL segments in a single batch call instead of one-by-one.
+        # In PROD this is one HTTP request; in DEV one forward pass.
+        segment_vecs = emb.encode_batch(state.segments, is_query=True)
+
+        candidate_hits: list[list[tuple[str, str, float]]] = []
+        for q_vec in segment_vecs:
             hits = emb.top_k_similar(q_vec, term_matrix, k=config.TOP_K_TERMS)
             seg_hits = [
                 (
@@ -137,19 +198,23 @@ def node_detect_candidates(state: DLPState) -> DLPState:
 
 def _fallback_substring(
     segments: list[str],
-    db_terms: list[ForbiddenTerm],
+    terms: list[dict],
 ) -> list[list[tuple[str, str, float]]]:
     """
     Fallback when embeddings are unavailable: simple case-insensitive
     substring search with a fixed score of 0.6.
+
+    Args:
+        segments: Document text windows.
+        terms:    Plain-dict term records from _get_cached_terms().
     """
     result: list[list[tuple[str, str, float]]] = []
     for segment in segments:
         seg_lower = segment.lower()
         hits: list[tuple[str, str, float]] = []
-        for t in db_terms:
-            if t.term.lower() in seg_lower:
-                hits.append((t.term, t.context_description or "", 0.6))
+        for t in terms:
+            if t["term"].lower() in seg_lower:
+                hits.append((t["term"], t["context"], 0.6))
         result.append(hits)
     return result
 
@@ -313,13 +378,23 @@ def build_graph() -> StateGraph:
 # ---------------------------------------------------------------------------
 
 _compiled_graph = None
+_graph_lock: threading.Lock = threading.Lock()
 
 
 def get_graph():
-    """Return the singleton compiled graph (lazy initialisation)."""
+    """
+    Return the singleton compiled LangGraph (thread-safe lazy initialisation).
+
+    Double-checked locking ensures build_graph() is called exactly once even
+    when multiple threads request the graph simultaneously on cold start.
+    Each call to graph.invoke() creates its own DLPState, so the shared
+    compiled graph is safe to use from multiple threads concurrently.
+    """
     global _compiled_graph
     if _compiled_graph is None:
-        _compiled_graph = build_graph()
+        with _graph_lock:
+            if _compiled_graph is None:
+                _compiled_graph = build_graph()
     return _compiled_graph
 
 

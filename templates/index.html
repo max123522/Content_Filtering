@@ -48,15 +48,15 @@
       <div class="section-label">Upload Document</div>
       <div class="upload-zone glass-card" id="uploadZone">
         <span class="upload-icon">📂</span>
-        <div class="upload-title">Drag &amp; Drop your document</div>
-        <div class="upload-subtitle">or click to browse files</div>
+        <div class="upload-title">Drag &amp; Drop your documents</div>
+        <div class="upload-subtitle">or click to browse — up to 5 files at once</div>
         <div class="upload-formats">
           <span class="format-badge">PDF</span>
           <span class="format-badge">DOCX</span>
           <span class="format-badge">DOC</span>
         </div>
         <input type="file" id="fileInput" accept=".pdf,.docx,.doc"
-               style="display:none" />
+               multiple style="display:none" />
       </div>
     </div>
 
@@ -92,7 +92,7 @@
 
   </div><!-- /scan-grid -->
 
-  <!-- ── Result panel ─────────────────────────────────────────────────────── -->
+  <!-- ── Single result panel (1 file) ────────────────────────────────────── -->
   <div class="result-panel glass-card" id="resultPanel">
     <div class="result-header" id="resultHeader">
       <span class="result-icon" id="resultIcon"></span>
@@ -104,6 +104,12 @@
       </div>
     </div>
     <div class="result-body" id="resultBody"></div>
+  </div>
+
+  <!-- ── Multi-result panel (2+ files) ────────────────────────────────────── -->
+  <div id="multiResultPanel" style="display:none;margin-top:var(--space-xl)">
+    <div class="section-label" style="margin-bottom:var(--space-md)">Batch Scan Results</div>
+    <div id="multiResultCards" style="display:flex;flex-direction:column;gap:var(--space-md)"></div>
   </div>
 
 </div><!-- /page-container -->

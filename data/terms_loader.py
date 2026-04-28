@@ -34,6 +34,11 @@ _DEFAULT_CONTEXTS: dict[str, str] = {
         "IAI and Rafael. References in technical documents may indicate classified "
         "interceptor design, trajectory data, or test results."
     ),
+    "חץ": (
+        "חץ הוא שם משפחה של מערכות נגד-טילים בליסטיים ישראליות שפותחו על ידי "
+        "תע\"א ורפאל (Arrow-2, Arrow-3). אזכור במסמכים טכניים עשוי להצביע על "
+        "מידע מסווג על עיצוב המיירט, נתוני מסלול או תוצאות ניסויים."
+    ),
     "Lampad": (
         "Lampad (למפאד) is a classified IAI guided missile program. Any reference "
         "in external documents is a potential security breach."
@@ -226,7 +231,7 @@ def run_ingestion(
             embedding_json: Optional[str] = None
             if embedding_service is not None:
                 try:
-                    vec = embedding_service.encode(term)
+                    vec = embedding_service.encode(term, is_query=False)
                     import json as _json
                     embedding_json = _json.dumps(vec.tolist())
                 except Exception as exc:
